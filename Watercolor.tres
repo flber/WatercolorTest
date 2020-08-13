@@ -1,0 +1,113 @@
+[gd_resource type="ShaderMaterial" load_steps=4 format=2]
+
+[ext_resource path="res://assets/seamless-watercolor-texture-free.jpg" type="Texture" id=1]
+[ext_resource path="res://assets/meadow.png" type="Texture" id=2]
+
+[sub_resource type="Shader" id=1]
+code = "shader_type spatial;
+render_mode unshaded, blend_mix, cull_disabled, depth_draw_alpha_prepass, specular_disabled;
+
+
+uniform sampler2D img_tex : hint_albedo;
+uniform sampler2D TextureUniform;
+uniform float AlbedoSaturation;
+uniform float Min;
+uniform float Max;
+uniform float Power;
+
+void fragment() {
+
+	// Read textures
+	vec4 wtr_tex_read = texture(img_tex, UV.xy);
+	vec3 wtr_tex_rgb = wtr_tex_read.rgb;
+	
+	vec4 al_tex_read = texture(TextureUniform, UV.xy);
+	vec3 al_text_rgb = al_tex_read.rgb;
+	float al_text_a = al_tex_read.a;
+	
+	// Creates overlay of textures
+	vec3 overlay;
+	vec3 grey;
+	{
+		// Calculates greyscale
+		//vec3 grey;
+		{
+			vec3 color = wtr_tex_rgb;
+			float avg = (color.r + color.g + color.b)/3.0;
+
+			grey = vec3(avg, avg, avg);
+		}
+	
+		vec3 inv_grey = vec3(1.0, 1.0, 1.0) - grey;
+		vec3 inv_color = vec3(1.0, 1.0, 1.0) - al_text_rgb;
+		vec3 inv_mult = inv_grey * inv_color;
+	
+		vec3 vec_two = vec3(2.00000, 2.00000, 2.00000);
+		vec3 inv_mult_two = inv_mult * vec_two;
+	
+		vec3 grey_mult_color = grey * al_text_rgb;
+		
+		vec3 overlay_high = vec3(1.0, 1.0, 1.0) - inv_mult_two;
+		vec3 overlay_low = grey_mult_color * vec_two;
+	
+		float margin = 0.00001;
+		vec3 vec_zero = vec3(0.00000, 0.00000, 0.00000);
+		
+		float mid = 0.5;
+		
+		if(grey.r < mid) {
+			overlay = overlay_low;
+		} else {
+			overlay = overlay_high;
+		}
+	}
+	
+	// Saturate
+	vec3 albedo;
+	{
+		float sat_vec_1 = 0.21250;
+		float sat_vec_2 = 0.71540;
+		float sat_vec_3 = 0.07210;
+		vec3 sat_vec = vec3(sat_vec_1, sat_vec_2, sat_vec_3);
+	
+		float dot_overlay = dot(overlay, sat_vec);
+	
+		albedo = mix(vec3(dot_overlay), overlay, vec3(AlbedoSaturation));
+	}
+	
+	// Fresnel alpa calculation
+	float fresnel;
+	{
+		vec3 normal = NORMAL;
+		vec3 view = VIEW;
+	
+		bool fresnel_inverse = true;
+		fresnel = fresnel_inverse ? (pow(clamp(dot(normal, view), 0.0, 1.0), Power)) : (pow(1.0 - clamp(dot(normal, view), 0.0, 1.0), Power));
+	}
+
+	// Lerps fresnel value to only affect edges
+	float alpha;
+	{
+		float fres_min = fresnel - Min;
+		float diff = Max - Min;
+		float fres_min_diff = fres_min * diff;
+
+		float lerp_fres = clamp(fres_min_diff, 0.0, 1.0);
+	
+		alpha = lerp_fres * 1.0;
+	}
+
+	// assign albedo and alpha
+	ALBEDO = albedo; //vec3(clamp(alpha*20.0, 0.0, 1.0));
+	ALPHA = clamp(alpha*20.0, 0.0, 1.0);
+
+}"
+
+[resource]
+shader = SubResource( 1 )
+shader_param/AlbedoSaturation = 2.0
+shader_param/Min = 0.1
+shader_param/Max = 0.4
+shader_param/Power = 3.0
+shader_param/img_tex = ExtResource( 1 )
+shader_param/TextureUniform = ExtResource( 2 )
